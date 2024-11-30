@@ -74,7 +74,7 @@ adsl <- dm %>%
   dplyr::mutate(TRT01P = ARM, TRT01A = ACTARM) # dim(adsl) 306 26
 ```
 
-# Derive treatment datetime, duration
+# Derive treatment datetime, duration variables
 
 ## EXSTDTM
 
@@ -182,7 +182,7 @@ adsl <- adsl %>%
 adsl %>% select(TRTSDT, TRTEDT, TRTDURD) %>% head()
 ```
 
-# Derive Disposition Variables
+# Derive disposition variables
 
 ## DSSTDT
 
@@ -295,7 +295,7 @@ adsl <- adsl %>%
 adsl %>% select(USUBJID,RANDDT) %>% head()
 ```
 
-# Derive Death Variables
+# Derive death variables
 
 ## DTHDT
 
@@ -315,13 +315,13 @@ adsl %>% select(USUBJID,TRTEDT, DTHDTC, DTHDT) %>% filter(!is.na(DTHDT)) %>% hea
 
 ```
 
-DTHCAUS
+## DTHCAUS
 
 -   Cause of death
 
 -   if the date of death is collected in the AE form when the AE is Fatal, the cause of death would be set to the preferred term (`AEDECOD`) of that Fatal AE, while if the date of death is collected in the `DS` form, the cause of death would be set to the disposition term (`DSTERM`). To achieve this, the \``` event()` `` objects within \``` derive_vars_extreme_event()` `` must be specified and defined such that they fit the study requirement.
 
-DTHDOM
+## DTHDOM
 
 -   Death Domain
 
@@ -464,7 +464,7 @@ adsl <- adsl %>%
 adsl %>% select(USUBJID, TRTEDT, DTHDT, LSTALVDT) %>% head()
 ```
 
-## Derive grouping, population variables
+# Derive grouping, population variables
 
 ## AGEGR1
 

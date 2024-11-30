@@ -1,6 +1,6 @@
 references/
-.Rproj
+*.Rproj
 pharmaversesdtm.R
 push_selective_files_folders_from_local_to_Github_repository.md
 test.R
-.Rproj.user
+*.Rproj.user
