@@ -281,6 +281,112 @@ adex <- derive_param_exposure(
 ) # dim(adex) 3209 40
 ```
 
+## Create Summary Records
+
+Exposure is commonly analyzed by a timing interval (e.g. APHASE, APERIOD, AVISIT, etc.). For these types of calculations, the derive_param_exposure() function may be used. In addition to creating a summarized AVAL, the function will also compute minimum and maximum dates for the record. For example, to calculate the total dose by subject and treatment
+
+A record with `PARAMCD == "TDOSE"` is created with `PARCAT1` set to `"OVERALL"` using the records in `ADEX` where `PARAMCD == "DOSE"` by summing `AVAL`. In addition, the `ASTDT`, and `AENDT` are created as the minimum and maximum date/times associated with each `by_vars` grouping. Note that, in addition to `PARAMCD`, `PARCAT1`, `AVAL`, `ASTDT` and `AENDT`, only those variables specified in the `by_vars` argument will be populated in the new records.
+
+```{r}
+adsl_vars <- exprs(TRTSDT, TRTSDTM, TRTEDT, TRTEDTM)
+
+# Remove existing TDOSE records
+adex <- adex %>% filter(PARAMCD != "TDOSE")
+
+# Derive new records for the parameter TDOSE (Total Dose) by summarizing exposure data
+adex <- derive_param_exposure(
+  dataset = adex
+  ,dataset_add = adex
+  ,by_vars = exprs(STUDYID, USUBJID, !!!adsl_vars)
+  # Specifies which parameter (DOSE) to summarize. This tells the function to use rows with PARAMCD = "DOSE" for calculations.
+  ,input_code = "DOSE"
+  ,set_values_to = exprs(
+    PARAMCD = "TDOSE"
+    ,PARCAT1 = "OVERALL"
+    ,AVAL = sum(AVAL, na.rm = TRUE)
+    )
+  ) # dim(adex) 3209 40
+```
+
+Multiple parameters (records) may be created at one time using the `call_derivation()` function:
+
+```{r}
+unique(adex$PARAMCD) # [1] "DURD"   "DOSE"   "PLDOSE" "ADJ"    "ADJAE"  "TDOSE"
+
+adex <- adex %>%
+  filter(!PARAMCD %in% c("TDOSE", "TPDOSE", "TDURD", "TADJ", "TADJAE")) # dim(adex) 2955 40
+
+# Derive new records for multiple parameters by summarizing exposure data
+adex <- adex %>%
+  call_derivation(
+    derivation = derive_param_exposure,
+    variable_params = list(
+      params(
+        set_values_to = exprs(
+          PARAMCD = "TDOSE",
+          PARCAT1 = "OVERALL",
+          AVAL = sum(AVAL, na.rm = TRUE)
+        ),
+        input_code = "DOSE"
+      ),
+      params(
+        set_values_to = exprs(
+          PARAMCD = "TPDOSE",
+          PARCAT1 = "OVERALL",
+          AVAL = sum(AVAL, na.rm = TRUE)
+        ),
+        input_code = "PLDOSE"
+      ),
+      params(
+        set_values_to = exprs(
+          PARAMCD = "TDURD",
+          PARCAT1 = "OVERALL",
+          AVAL = sum(AVAL, na.rm = TRUE)
+        ),
+        input_code = "DURD"
+      ),
+      params(
+        set_values_to = exprs(
+          PARAMCD = "TADJ",
+          PARCAT1 = "OVERALL",
+          AVALC = if_else(sum(!is.na(AVALC)) > 0, "Y", NA_character_)
+        ),
+        input_code = "ADJ"
+      ),
+      params(
+        set_values_to = exprs(
+          PARAMCD = "TADJAE",
+          PARCAT1 = "OVERALL",
+          AVALC = if_else(sum(!is.na(AVALC)) > 0, "Y", NA_character_)
+        ),
+        input_code = "ADJAE"
+      )
+    ),
+    dataset_add = adex,
+    by_vars = exprs(STUDYID, USUBJID, !!!adsl_vars)
+  )
+
+count(adex, PARAMCD, PARCAT1)
+```
+
+```{r}
+# Count rows per by group using dplyr, producing the same result as count(adex, PARAMCD, PARCAT1)
+adex %>% group_by(PARAMCD, PARCAT1) %>% summarize(n = n(), .groups = "drop")
+```
+
+Dose intensity can be calculated using the function `derive_param_doseint()`. The planned dose and administered dose are passed into the function and a new record is created with the dose intensity calculation. Again, only those variables specified in the `by_vars` argument will be populated in this new record.
+
+```{r}
+dim(adex) # 4225 40
+
+adex <- adex %>%
+  derive_param_doseint(
+    by_vars = exprs(STUDYID, USUBJID, !!!adsl_vars),
+    set_values_to = exprs(PARAMCD = "TNDOSINT"),
+    tadm_code = "TDOSE",
+    tpadm_code = "TPDOSE") # dim(adex) 4479 40
+```
+
 # References
 
 [Creating a BDS Exposure ADaM](https://cran.r-project.org/web/packages/admiral/vignettes/bds_exposure.html)
