@@ -190,10 +190,13 @@ adex %>% select(ASTDT, AENDT, EXDURD) %>% head()
 
 ## DOSEO
 
--   `EXDOSE * EXDURD`
+-   Dose Overall (?). Refers to the actual dose of the study drug administered, standardized (e.g., per unit of body weight, such as mg/kg).
+
+-   \``EXDOSE * EXDURD`\`
 
 ## PDOSEO
 
+-   Planned Dose Overall (?) Represents the planned dose per protocol, similarly normalized
 -   \`EXPLDOS \* EXDURD\`
 
 ```{r}
@@ -203,6 +206,79 @@ adex <- adex %>%
     ,PDOSEO = EXPLDOS * EXDURD)
 
 adex %>% select(USUBJID, EXDOSE, EXPLDOS, EXDURD, DOSEO, PDOSEO) %>% head()
+```
+
+## Create 1:1 mapping records
+
+The first set of exposure records to create will be records mapped 1:1 to an existing collected exposure record in SDTM. For these records, the `AVAL` or `AVALC` would be calculated using columns that exist on the data and no summarizing of records would be necessary.
+
+These records may be used for input into summary records or be used individually for summarization in outputs. Some examples may be exposure duration, dose administered, dose adjusted, etc. based on one exposure record in SDTM.
+
+These records can be derived using simple `dplyr::mutate` assignments and then combined
+
+## PARAMCD
+
+-   Parameter Code
+
+## AVALC
+
+-   Analysis Value Character ?
+
+```{r}
+adex_durd <- adex %>%
+  mutate(
+    PARAMCD = "DURD",
+    AVAL = EXDURD)
+
+adex_dose <- adex %>%
+  mutate(
+    PARAMCD = "DOSE",
+    AVAL = DOSEO)
+
+adex_pldos <- adex %>%
+  mutate(
+    PARAMCD = "PLDOSE",
+    AVAL = PDOSEO)
+
+adex_adj <- adex %>%
+  mutate(
+    PARAMCD = "ADJ",
+    AVALC = if_else(!is.na(EXADJ), "Y", NA_character_)
+  )
+
+adex_adjae <- adex %>%
+  mutate(
+    PARAMCD = "ADJAE",
+    AVALC = if_else(EXADJ == "ADVERSE EVENT", "Y", NA_character_)
+  )
+
+adex <- bind_rows(
+  adex_durd,
+  adex_dose,
+  adex_pldos,
+  adex_adj,
+  adex_adjae) %>%
+  mutate(PARCAT1 = "INDIVIDUAL") # dim(adex) 2955 40
+
+adex %>% select(USUBJID,VISIT,ASTDT,AENDT,PARAMCD,AVAL,AVALC) %>% head()
+```
+
+## Create Summary Records
+
+Exposure is commonly analyzed by a timing interval (e.g. `APHASE`, `APERIOD`, `AVISIT`, etc.). For these types of calculations, the `derive_param_exposure()` function may be used. In addition to creating a summarized `AVAL`, the function will also compute minimum and maximum dates for the record. For example, to calculate the total dose by subject and treatment
+
+```{r}
+adex <- derive_param_exposure(
+  dataset = adex
+  ,dataset_add = adex
+  ,by_vars = exprs(STUDYID, USUBJID, !!!adsl_vars)
+  ,input_code = "DOSE"
+  ,set_values_to = exprs(
+    PARAMCD = "TDOSE",
+    PARCAT1 = "OVERALL",
+    AVAL = sum(AVAL, na.rm = TRUE)
+  )
+) # dim(adex) 3209 40
 ```
 
 # References
