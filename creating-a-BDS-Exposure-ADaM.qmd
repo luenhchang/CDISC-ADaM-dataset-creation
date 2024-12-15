@@ -387,6 +387,87 @@ adex <- adex %>%
     tpadm_code = "TPDOSE") # dim(adex) 4479 40
 ```
 
+The default calculation for dose intensity is: `Administered Doses / Planned Doses * 100`. Please see the `derive_param_doseint()` documentation to see how planned doses of 0 or NA are handled.
+
+## Assign `PARAMCD`, `PARAMN`, etc. from Reference tables
+
+To assign parameter level values such as `PARAM`, `PARAMN`, `PARCAT1`, etc., a lookup can be created to join to the source data.
+
+```{r}
+# param_lookup not found
+
+# adex <- derive_vars_merged(
+#   adex,
+#   dataset_add = param_lookup,
+#   by_vars = exprs(PARAMCD)
+# )
+
+#count(adex, PARAMCD, PARAM, PARAMN)
+```
+
+# Derive Categorization Variables (`AVALCATx`)
+
+## AVALCAT1
+
+`{admiral}` does not currently have a generic function to aid in assigning `AVALCATx`/ `AVALCAxN` values. Below is a simple example of how these values may be assigned using the `dplyr::mutate` function:
+
+```{r}
+adex <- adex %>%
+  mutate(
+    AVALCAT1 = case_when(
+      PARAMCD %in% c("TDURD") & AVAL < 30 ~ "< 30 days",
+      PARAMCD %in% c("TDURD") & AVAL >= 30 & AVAL < 90 ~ ">= 30 and < 90 days",
+      PARAMCD %in% c("TDURD") & AVAL >= 90 ~ ">=90 days",
+      PARAMCD %in% c("TDOSE", "TPDOSE") & AVAL < 1000 ~ "< 1000 mg",
+      PARAMCD %in% c("TDOSE", "TPDOSE") & AVAL >= 1000 ~ ">= 1000 mg",
+      TRUE ~ NA_character_
+    )
+  )
+adex %>% select(USUBJID,VISIT,PARCAT1,PARAMCD,AVAL,AVALCAT1) %>% filter(!is.na(AVALCAT1)) %>% head()
+```
+
+## Assign `ASEQ`
+
+## ASEQ 
+
+-   Analysis Sequence
+
+The `{admiral}` function `derive_var_obs_number()` can be used to derive `ASEQ`. An example call is:
+
+```{r}
+# Not working as PARAMN is not found
+#adex <- derive_var_obs_number(
+#  adex,
+#  new_var = ASEQ,
+#  by_vars = exprs(STUDYID, USUBJID),
+#  order = exprs(PARCAT1, ASTDT, VISIT, VISITNUM, EXSEQ, PARAMN),
+#  check_type = "error"
+#)
+
+#adex %>% select(USUBJID,,VISIT,PARCAT1,PARAMCD,AVAL,ASTDT,ASEQ) %>% head()
+```
+
+If needed, the other `ADSL` variables can now be added:
+
+```{r}
+# Deselect variables using negate_vars()
+#adex <- adex %>%
+#  derive_vars_merged(
+#    dataset_add = select(adsl, !!!negate_vars(adsl_vars)),
+#    by_vars = exprs(STUDYID, USUBJID)
+#  )
+```
+
+## Add Labels and Attributes
+
+Adding labels and attributes for SAS transport files is supported by the following packages:
+
+-   [metacore](https://atorus-research.github.io/metacore/): establish a common foundation for the use of metadata within an R session.
+
+-   [metatools](https://pharmaverse.github.io/metatools/): enable the use of metacore objects. Metatools can be used to build datasets or enhance columns in existing datasets as well as checking datasets against the metadata.
+
+-   [xportr](https://atorus-research.github.io/xportr/): functionality to associate all metadata information to a local R data frame, perform data set level validation checks and convert into a [transport v5 file(xpt)](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/movefile/n1xbwdre0giahfn11c99yjkpi2yb.htm).
+
 # References
 
 [Creating a BDS Exposure ADaM](https://cran.r-project.org/web/packages/admiral/vignettes/bds_exposure.html)
