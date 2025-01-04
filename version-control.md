@@ -199,5 +199,11 @@ Make sure that the .gitignore file contains the correct pattern to ignore .Rproj
 ## 2025-01-03
 ```bash
 cd C:/GoogleDrive_MyDrive/scripts/CDISC-ADaM-dataset-creation
+git add .
+git commit -m "Updated creating-a-BDS-Finding-ADaM.qmd"
+git push origin main
 ```
+
+## 2025-01-04
+
  
