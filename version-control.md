@@ -205,5 +205,16 @@ git push origin main
 ```
 
 ## 2025-01-04
+```bash
+cd C:/GoogleDrive_MyDrive/scripts/CDISC-ADaM-dataset-creation
+git add .
+git commit -m "Updated creating-a-BDS-Exposure-ADaM.qmd"
+git push origin main
+```
 
- 
+```bash
+cd C:/GoogleDrive_MyDrive/scripts/CDISC-ADaM-dataset-creation
+git add .
+git commit -m "Updated creating-a-BDS-Exposure-ADaM.qmd"
+git push origin main
+```

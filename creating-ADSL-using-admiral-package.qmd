@@ -26,7 +26,11 @@ editor: visual
 source: "https://cran.r-project.org/web/packages/admiral/vignettes/adsl.html"
 ---
 
-Get required R packages
+# Read in Data
+
+To start, all data frames needed for the creation of `ADSL` should be read into the environment. This will be a company specific process. Some of the data frames needed may be `DM`, `EX`, `DS`, `AE`, and `LB`.
+
+For example purpose, the CDISC Pilot SDTM datasets—which are included in `{pharmaversesdtm}`—are used.
 
 ```{r}
 #| echo: false
@@ -36,8 +40,6 @@ library(pharmaversesdtm)
 library(lubridate)
 library(stringr)
 ```
-
-# Read CDISC pilot SDTM datasets
 
 ```{r}
 #| echo: false
@@ -54,19 +56,7 @@ ae <- convert_blanks_to_na(ae) # dim(ae) 1191 35
 lb <- convert_blanks_to_na(lb) # dim(lb) 59580 23
 ```
 
-# Derive treatment variables
-
-## TRT01P
-
--   **P**lanned **Tr**ea**t**ment for Period **01**
-
--   Derived from DM.ARM
-
-## TRT01A
-
--   **A**ctual **Tr**ea**t**ment for Period **01**
-
--   Derived from DM.ACTARM
+The `DM` domain is used as the basis for `ADSL`:
 
 ```{r}
 adsl <- dm %>%
@@ -74,11 +64,35 @@ adsl <- dm %>%
   dplyr::mutate(TRT01P = ARM, TRT01A = ACTARM) # dim(adsl) 306 26
 ```
 
+# Derive Period, Subperiod, and Phase Variables
+
+See the [“Visit and Period Variables” vignette](https://cran.r-project.org/web/packages/admiral/vignettes/visits_periods.html#periods_adsl) for more information.
+
+If the variables are not derived based on a period reference dataset, they may be derived at a later point of the flow. For example, phases like “Treatment Phase” and “Follow up” could be derived based on treatment start and end date.
+
+# Derive treatment variables
+
+## TRTxxP
+
+-   Planned Treatment for Period xx (e.g. TRT01P for the first planned treatment)
+
+-   Subject-level identifier that represents the planned treatment for period xx. In a one-period randomized trial, TRT01P would be the treatment to which the subject was randomized. TRTxxP might be derived from the SDTM DM variable ARM. At least TRT01P is required.
+
+-   Derived from DM.ARM
+
+## TRTxxA
+
+-   **A**ctual **Tr**ea**t**ment for Period xx
+
+-   Subject-level identifier that represents the actual treatment for the subject for period xx. Required when actual treatment does not match planned and there is an analysis of the data as treated.
+
+-   Derived from DM.ACTARM
+
 # Derive treatment datetime, duration variables
 
 ## EXSTDTM
 
--   Numeric start datetime of exposure derived from character EXSTDTC
+-   Numeric datetime of first exposure derived from character EXSTDTC
 
 -   Date with missing time can be imputated. e.g., EXSTDTC="2014-01-02" –\> EXSTDTM= 2014-01-02 00:00:00
 
@@ -86,11 +100,15 @@ adsl <- dm %>%
 
 ## EXENDTM
 
--   Numeric end datetime of exposure derived from character EXENDTC
+-   Numeric datetime of last exposure derived from character EXENDTC
 
 -   Date with missing time can be imputed. E.g., EXENDTC="2014-01-16" –\> EXENDTM=2014-01-16 23:59:59
 
 ## EXENTMF
+
+The function `derive_vars_merged()` can be used to derive the treatment start and end date/times using the `ex` domain. A pre-processing step for `ex` is required to convert the variable `EXSTDTC` and `EXSTDTC` to datetime variables and impute missing date or time components. Conversion and imputation is done by `derive_vars_dtm()`.
+
+Example calls:
 
 ```{r}
 # Derive a datetime object --DTM from a date character vector --DTC
@@ -167,9 +185,17 @@ adsl %>% select(TRTSDTM, TRTSTMF, TRTEDTM, TRTETMF) %>% head()
 
 ## TRTDURD
 
--   Treatment duration
+-   Total Treatment Duration (Days)
+
+-   Total treatment duration, as measured in days. More than one of TRTDURD, TRTDURM, and TRTDURY can be populated, but each represents the entire duration in its respective units.
 
 -   \`TRTDURD= TRTEDT- TRTSDT+1\`
+
+This call returns the original data frame with the column `TRTSDTM`, `TRTSTMF`, `TRTEDTM`, and `TRTETMF` added. Exposure observations with incomplete date and zero doses of non placebo treatments are ignored. Missing time parts are imputed as first or last for start and end date respectively.
+
+The datetime variables returned can be converted to dates using the `derive_vars_dtm_to_dt()` function.
+
+Now, that `TRTSDT` and `TRTEDT` are derived, the function `derive_var_trtdurd()` can be used to calculate the Treatment duration (`TRTDURD`).
 
 ```{r}
 # New variables added: "TRTSDT" "TRTEDT" "TRTDURD"
@@ -192,7 +218,13 @@ adsl %>% select(TRTSDT, TRTEDT, TRTDURD) %>% head()
 
 -   End of Study Date
 
+-   Date subject ended the study - either date of completion or date of discontinuation or data cutoff date for interim analyses.
+
 -   Numeric version of DS.DSSTDTC or data cutoff date
+
+The functions `derive_vars_dt()` and `derive_vars_merged()` can be used to derive a disposition date. First the character disposition date (`DS.DSSTDTC`) is converted to a numeric date (`DSSTDT`) calling `derive_vars_dt()`. The `DS` dataset is extended by the `DSSTDT` variable because the date is required by other derivations, e.g., `RANDDT` as well. Then the relevant disposition date is selected by adjusting the `filter_add` argument.
+
+To add the End of Study date (`EOSDT`) to the input dataset, a call could be:
 
 ```{r}
 # New variable added: DSSTDT
@@ -225,9 +257,13 @@ adsl <- admiral::derive_vars_merged(
 adsl %>% select(USUBJID, EOSDT) %>% tail()
 ```
 
+The `derive_vars_dt()` function allows to impute partial dates as well. If imputation is needed and missing days are to be imputed to the first of the month and missing months to the first month of the year, set `highest_imputation = "M"`.
+
 ## EOSSTT
 
--   Subject’s status as of the end of study or data cutoff. Examples: COMPLETED, DISCONTINUED, ONGOING.
+-   End of Study Status
+
+-   The subject's status as of the end of study or data cutoff. Examples: COMPLETED, DISCONTINUED, ONGOING.
 
 -   Derived based on DS.DSCAT and DS.DSDECOD
 
@@ -239,9 +275,13 @@ format_eosstt <- function(x) {
     ,x %in% c("SCREEN FAILURE") ~ NA_character_
     ,TRUE ~ "DISCONTINUED")
 }
+```
 
+The customized mapping function `format_eosstt()` can now be passed to the main function. For subjects without a disposition event the end of study status is set to `"ONGOING"` by specifying the `missing_values` argument.
+
+```{r}
 # New variables added: EOSSTT (End of Study Status)
-adsl <- adsl %>%
+adsl <- adsl %>% 
   derive_vars_merged(
      dataset_add = ds
     ,by_vars = exprs(STUDYID, USUBJID)
@@ -253,9 +293,15 @@ adsl <- adsl %>%
 adsl %>% select(USUBJID, EOSDT,EOSSTT) %>% tail()
 ```
 
+This call would return the input dataset with the column `EOSSTT` added.
+
+If the derivation must be changed, the user can create his/her own function to map `DSDECOD` to a suitable `EOSSTT` value.
+
 ## DCSREAS
 
 -   Reason for Discontinuation from Study
+
+-   Reason for subject's discontinuation from study. The source would most likely be the SDTM DS dataset. Null for subjects who completed the study.
 
 -   If DS.DSDECOD \<\> "COMPLETED where DSSCAT = "STUDY PARTICIPATION" (i.e. ADSL.EOSSTT is "DISCONTINUED") then ADSL.DCSREAS = DS.DSDECOD; If DS.DSDECOD = "COMPLETED" where DSSCAT = "STUDY PARTICIPATION", then ADSL.DCSREAS is <null>; If there is no DS record where DSSCAT = "STUDY PARTICIPATION" (i.e. EOSSTT is "ONGOING") then ADSL.DCSREAS is null.
 
@@ -263,7 +309,27 @@ adsl %>% select(USUBJID, EOSDT,EOSSTT) %>% tail()
 
 -   Reason Specified for Discontinuation from Study
 
+-   Additional detail regarding subject's discontinuation from study (e.g., description of "other").
+
 -   If DS.DSDECOD \<\> "COMPLETED" where DS.DSSCAT = "STUDY PARTICIPATION" (i.e. ADSL.EOSSTT is "DISCONTINUED") CO.COVAL / CO.COVAL1 where COREF = "PRIMARY REASON FOR STUDY DISCONTINUATION" (if populated); otherwise ADSL.DCSREASP is null.
+
+**Disposition Reasons**
+
+The main reason for discontinuation is usually stored in `DSDECOD` while `DSTERM` provides additional details regarding subject’s discontinuation (e.g., description of `"OTHER"`).
+
+The function `derive_vars_merged()` can be used to derive a disposition reason (along with the details, if required) at a specific timepoint. The relevant observations are selected by adjusting the `filter_add` argument.
+
+To derive the End of Study reason(s) (`DCSREAS` and `DCSREASP`), the function will map `DCSREAS` as `DSDECOD`, and `DCSREASP` as `DSTERM` if `DSDECOD` is not `"COMPLETED"`, `"SCREEN FAILURE"`, or `NA`, `NA` otherwise.
+
+This call would return the input dataset with the column `DCSREAS` and `DCSREASP` added.
+
+If the derivation must be changed, the user can define that derivation in the `filter_add` argument of the function to map `DSDECOD` and `DSTERM` to a suitable `DCSREAS`/`DCSREASP` value.
+
+The call below maps `DCSREAS` and `DCREASP` as follows:
+
+-   `DCSREAS` as `DSDECOD` if `DSDECOD` is not `"COMPLETED"` or `NA`, `NA` otherwise
+
+-   `DCSREASP` as `DSTERM` if `DSDECOD` is equal to `OTHER`, `NA` otherwise
 
 ```{r}
 adsl <- adsl %>%
@@ -282,7 +348,11 @@ adsl %>% select(USUBJID,EOSDT,EOSSTT,DCSREAS,DCSREASP) %>% head()
 
 -   Date of Randomization
 
+-   Required in randomized trials.
+
 -   DS.DSSTDTC is a character (text) variable with date in ISO 8601 format: YYYY-MM-DD (e.g. 1997-07-16). ADSL.RANDDT is the DS.DSSTDTC where DSDECOD = "RANDOMIZED", SAS date format DATE11.; If a subject was not randomized (e.g. Screen Failure) and there is no record in DS for the subject where DSDECOD = "Randomized" then ADSL.RANDDT is null.
+
+The function `derive_vars_merged()` can be used to derive randomization date variable. To map Randomization Date (`RANDDT`), the call would be:
 
 ```{r}
 adsl <- adsl %>%
@@ -299,9 +369,13 @@ adsl %>% select(USUBJID,RANDDT) %>% head()
 
 ## DTHDT
 
--   Death date
+-   Date of death
 
--   Convert character DM.DTHDTC to numeric DTHDT
+-   Date of subject's death. Derived from DM.DTHDTC.
+
+The function `derive_vars_dt()` can be used to derive `DTHDT`. This function allows the user to impute the date as well.
+
+Example calls:
 
 ```{r}
 adsl <- adsl %>%
@@ -312,8 +386,22 @@ adsl <- adsl %>%
     ) # dim(adsl) 306 39
 
 adsl %>% select(USUBJID,TRTEDT, DTHDTC, DTHDT) %>% filter(!is.na(DTHDT)) %>% head()
-
 ```
+
+This call would return the input dataset with the columns `DTHDT` added and, by default, the associated date imputation flag (`DTHDTF`) populated with the controlled terminology outlined in the ADaM IG for date imputations. If the imputation flag is not required, the user must set the argument `flag_imputation` to `"none"`.
+
+If imputation is needed and the date is to be imputed to the first day of the month/year the call would be:
+
+```{r}
+adsl <- adsl %>%
+  derive_vars_dt(
+    new_vars_prefix = "DTH",
+    dtc = DTHDTC,
+    date_imputation = "first"
+  )
+```
+
+See also [Date and Time Imputation](https://cran.r-project.org/web/packages/admiral/vignettes/imputation.html).
 
 ## DTHCAUS
 
@@ -332,6 +420,14 @@ adsl %>% select(USUBJID,TRTEDT, DTHDTC, DTHDT) %>% filter(!is.na(DTHDT)) %>% hea
 -   Death Sequence Number
 
 -   Store the `xxSEQ` value of that domain
+
+The cause of death `DTHCAUS` can be derived using the function `derive_vars_extreme_event()`.
+
+Since the cause of death could be collected/mapped in different domains (e.g. `DS`, `AE`, `DD`), it is important the user specifies the right source(s) to derive the cause of death from.
+
+For example, if the date of death is collected in the AE form when the AE is Fatal, the cause of death would be set to the preferred term (`AEDECOD`) of that Fatal AE, while if the date of death is collected in the `DS` form, the cause of death would be set to the disposition term (`DSTERM`). To achieve this, the `event()` objects within `derive_vars_extreme_event()` must be specified and defined such that they fit the study requirement.
+
+An example call to `derive_vars_extreme_event()` would be:
 
 ```{r}
 # New variables: DTHCAUS, DTHDOM, DTHSEQ
@@ -375,11 +471,19 @@ adsl <- adsl %>%
 adsl %>% filter(!is.na(DTHDT)) %>% select(USUBJID, DTHCAUS, DTHDOM, DTHCGR1) %>% head()
 ```
 
+**Duration relative to death**
+
 ## DTHADY
 
 -   Relative Day of Death
 
 -   `DTHADY=DTHDT-TRTSDT+1`
+
+The function `derive_vars_duration()` can be used to derive duration relative to death like the Relative Day of Death (`DTHADY`) or the numbers of days from last dose to death (`LDDTHELD`).
+
+Example calls:
+
+-   Relative Day of Death
 
 ```{r}
 adsl <- adsl %>%
@@ -410,11 +514,17 @@ adsl <- adsl %>%
 adsl %>% filter(!is.na(DTHDT)) %>% select(USUBJID, TRTEDT, DTHDT, LDDTHELD) %>% head()
 ```
 
+# Derive the Last Date Known Alive
+
 ## LSTALVDT
 
 -   Last Date Known Alive
 
 -   Similarly as for the cause of death (`DTHCAUS`), the last known alive date (`LSTALVDT`) can be derived from multiples sources using \``` derive_vars_extreme_event()` ``.
+
+Similarly as for the cause of death (DTHCAUS), the last known alive date (LSTALVDT) can be derived from multiples sources using derive_vars_extreme_event().
+
+An example could be (DTC dates are converted to numeric dates imputing missing day and month to the first):
 
 ```{r}
 adsl <- adsl %>%
@@ -464,17 +574,85 @@ adsl <- adsl %>%
 adsl %>% select(USUBJID, TRTEDT, DTHDT, LSTALVDT) %>% head()
 ```
 
+Traceability variables can be added by specifying the variables in the `set_values_to` parameter of the `event()` function.
+
+```{r}
+adsl <- adsl %>%
+  select(-LSTALVDT) %>% # created in the previous call
+  derive_vars_extreme_event(
+    by_vars = exprs(STUDYID, USUBJID),
+    events = list(
+      event(
+        dataset_name = "ae",
+        order = exprs(AESTDTC, AESEQ),
+        condition = !is.na(AESTDTC),
+        set_values_to = exprs(
+          LSTALVDT = convert_dtc_to_dt(AESTDTC, highest_imputation = "M"),
+          LALVSEQ = AESEQ,
+          LALVDOM = "AE",
+          LALVVAR = "AESTDTC"
+        ),
+      ),
+      event(
+        dataset_name = "ae",
+        order = exprs(AEENDTC, AESEQ),
+        condition = !is.na(AEENDTC),
+        set_values_to = exprs(
+          LSTALVDT = convert_dtc_to_dt(AEENDTC, highest_imputation = "M"),
+          LALVSEQ = AESEQ,
+          LALVDOM = "AE",
+          LALVVAR = "AEENDTC"
+        ),
+      ),
+      event(
+        dataset_name = "lb",
+        order = exprs(LBDTC, LBSEQ),
+        condition = !is.na(LBDTC),
+        set_values_to = exprs(
+          LSTALVDT = convert_dtc_to_dt(LBDTC, highest_imputation = "M"),
+          LALVSEQ = LBSEQ,
+          LALVDOM = "LB",
+          LALVVAR = "LBDTC"
+        ),
+      ),
+      event(
+        dataset_name = "adsl",
+        condition = !is.na(TRTEDT),
+        set_values_to = exprs(LSTALVDT = TRTEDT, LALVSEQ = NA_integer_, LALVDOM = "ADSL", LALVVAR = "TRTEDTM"),
+      )
+    ),
+    source_datasets = list(ae = ae, lb = lb, adsl = adsl),
+    tmp_event_nr_var = event_nr,
+    order = exprs(LSTALVDT, LALVSEQ, event_nr),
+    mode = "last",
+    new_vars = exprs(LSTALVDT, LALVSEQ, LALVDOM, LALVVAR)
+  )
+```
+
 # Derive grouping, population variables
 
-## AGEGR1
+## AGEGRy
 
--   Pooled Age Group 1
+-   Pooled Age Group y
 
--   Study-specific threshold. e.g. If ADSL.AGE \< 65, AGEGR1 = "\<65"; If ADSL.AGE = 65 or if ADSL.AGE \> 65, AGEGR1 = "\>=65"
+-   Character description of a grouping or pooling of the subject's age for analysis purposes. For example, AGEGR1 might have values of "\<18", "18-65", and "\>65"; AGEGR2 might have values of "Less than 35 y old" and "At least 35 y old".
 
-## REGION1
+## REGIONy
 
--   Study-specific grouping variable
+-   Geographic Region y
+-   Character description of geographical region. For example, REGION1 might have values of "Asia", "Europe", "North America", "Rest of World"; REGION2 might have values of "United States", "Rest of World".
+
+**Grouping (e.g., AGEGR1 or REGION1)**
+
+Numeric and categorical variables (`AGE`, `RACE`, `COUNTRY`, etc.) may need to be grouped to perform the required analysis. `{admiral}` does not **currently** have functionality to assist with all required groupings. So, the user will often need to create his/her own function to meet his/her study requirement.
+
+For example, if
+
+-   `AGEGR1` is required to categorize `AGE` into `<18`, `18-64` and `>64`, or
+
+-   `REGION1` is required to categorize `COUNTRY` in `North America`, `Rest of the World`,
+
+the user defined functions would look like the following:
 
 ```{r}
 format_agegr1 <- function(var_input) {
@@ -493,7 +671,11 @@ format_region1 <- function(var_input) {
     TRUE ~ "Missing"
   )
 }
+```
 
+These functions are then used in a `mutate()` statement to derive the required grouping variables:
+
+```{r}
 adsl <- adsl %>%
   mutate(
     AGEGR1 = format_agegr1(AGE),
@@ -503,6 +685,8 @@ adsl <- adsl %>%
 adsl %>% select(USUBJID, AGE, COUNTRY, AGEGR1, REGION1) %>% head()
 ```
 
+**Population flags**
+
 ## SAFFL
 
 -   Safety Population Flag
@@ -510,6 +694,10 @@ adsl %>% select(USUBJID, AGE, COUNTRY, AGEGR1, REGION1) %>% head()
 -   These flags identify whether or not the subject is included in the specified population. A minimum of one subject-level population flag variable is required in ADSL. Not all of the indicators listed here need to be included in ADSL. As stated in Section 3.1.4, Item 2, only those indicators corresponding to populations defined in the statistical analysis plan or populations used as a basis for analysis need be included in ADSL. This list of flags is not meant to be all-inclusive. Additional population flags may be added. The values of subject-level population flags cannot be blank. If a flag is used, the corresponding numeric version (\*FN, where 0=no and 1=yes) of the population flag can also be included. Please also refer to Section 3.1.4.
 
 -   Since the populations flags are mainly company/study specific no dedicated functions are provided, but in most cases they can easily be derived using `derive_var_merged_exist_flag`.
+
+Since the populations flags are mainly company/study specific no dedicated functions are provided, but in most cases they can easily be derived using `derive_var_merged_exist_flag`.
+
+An example of an implementation could be:
 
 ```{r}
 adsl <- adsl %>%
@@ -523,8 +711,36 @@ adsl <- adsl %>%
 adsl %>% select(USUBJID, ARM, ACTARM, SAFFL) %>% head()
 ```
 
+# Derive Other Variables
+
+The users can add specific code to cover their need for the analysis.
+
+The following functions are helpful for many ADSL derivations:
+
+-   `derive_vars_merged()` - Merge Variables from a Dataset to the Input Dataset
+
+-   `derive_var_merged_exist_flag()` - Merge an Existence Flag
+
+-   `derive_var_merged_summary()` - Merge Summary Variables
+
+See also [Generic Functions](https://cran.r-project.org/web/packages/admiral/vignettes/generic.html).
+
+# Add Labels and Attributes
+
+Adding labels and attributes for SAS transport files is supported by the following packages:
+
+-   [metacore](https://atorus-research.github.io/metacore/): establish a common foundation for the use of metadata within an R session.
+
+-   [metatools](https://pharmaverse.github.io/metatools/): enable the use of metacore objects. Metatools can be used to build datasets or enhance columns in existing datasets as well as checking datasets against the metadata.
+
+-   [xportr](https://atorus-research.github.io/xportr/): functionality to associate all metadata information to a local R data frame, perform data set level validation checks and convert into a [transport v5 file(xpt)](https://documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/movefile/n1xbwdre0giahfn11c99yjkpi2yb.htm).
+
+NOTE: All these packages are in the experimental phase, but the vision is to have them associated with an End to End pipeline under the umbrella of the [pharmaverse](https://github.com/pharmaverse). An example of applying metadata and perform associated checks can be found at the [pharmaverse E2E example](https://pharmaverse.github.io/examples/adam/adsl).
+
 # References
 
 [Creating ADSL](https://cran.r-project.org/web/packages/admiral/vignettes/adsl.html)
 
 [ADaM Subject-level Analysis - ADSL Dataset](https://www.cdisc.org/kb/examples/adam-subject-level-analysis-adsl-dataset-80283806)
+
+[ADaMIG V1.3](https://library.cdisc.org/browser/#/mdr/adam/adamig-1-3/datastructures/ADSL/variablesets/Identifier)

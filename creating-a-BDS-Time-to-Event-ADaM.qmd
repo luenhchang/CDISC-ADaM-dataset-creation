@@ -1,0 +1,89 @@
+---
+title: "Creating a basic data structure (BDS) Time-to-Event ADaM"
+author: "Lun-Hsien Chang"
+date: "04-Jan-2025"
+toc: true
+toc-depth: 2  # Levels of headings to include in TOC (e.g., 2 includes H1 and H2)
+toc-title: "Programming workflow"  # Custom title for the TOC
+format:
+  html:
+    css: styles.css  # Use custom CSS for soft-wrap in HTML
+  pdf: 
+    latex_engine: xelatex
+    header-includes:
+      - \usepackage{listings}
+      - \lstset{breaklines=true, breakatwhitespace=true, basicstyle=\ttfamily\small, columns=fullflexible}
+    fontsize: 11pt
+    geometry: margin=1in, left=1in, right=1in, top=1in, bottom=1in
+    mainfont: "Times New Roman"
+    fontenc: T1
+    citation_package: natbib
+    urlcolor: blue       # Make URLs blue
+    linkcolor: blue      # Make links in the PDF blue
+    hyperref: true
+  markdown:
+    variant: gfm         # Use GitHub Flavored Markdown
+    embed-resources: true # Embed images and other resources
+output-dir: "outputs"
+editor: visual
+source: "https://cran.r-project.org/web/packages/admiral/vignettes/bds_tte.html"
+---
+
+# Introduction
+
+This article describes creating a BDS time-to-event ADaM.
+
+The main part in programming a time-to-event dataset is the definition of the events and censoring times. {admiral} supports single events like death or composite events like disease progression or death. More than one source dataset can be used for the definition of the event and censoring times.
+
+Note: All examples assume CDISC SDTM and/or ADaM format as input unless otherwise specified.
+
+# Required Packages
+
+```{r}
+#| echo: false
+library(admiral)
+library(dplyr, warn.conflicts = FALSE)
+library(pharmaversesdtm)
+```
+
+# Read in Data
+
+To start, all datasets needed for the creation of the time-to-event dataset should be read into the environment. This will be a company specific process.
+
+For example purpose, the ADSL dataset—which is included in `{admiral}`—and the SDTM datasets from `{pharmaversesdtm}` are used.
+
+```{r}
+data("ae")
+data("admiral_adsl")
+
+ae <- convert_blanks_to_na(ae) # dim(ae) [1] 1191   35
+adsl <- admiral_adsl # dim(adsl) [1] 306  50
+```
+
+The following code creates a minimally viable ADAE dataset to be used throughout the following examples.
+
+```{r}
+adae <- ae %>%
+  left_join(adsl, by = c("STUDYID", "USUBJID")) %>%
+  derive_vars_dt(
+    new_vars_prefix = "AST",
+    dtc = AESTDTC,
+    highest_imputation = "M"
+  ) %>%
+  derive_vars_dt(
+    new_vars_prefix = "AEN",
+    dtc = AEENDTC,
+    highest_imputation = "M",
+    date_imputation = "last"
+  ) %>%
+  mutate(TRTEMFL = if_else(ASTDT >= TRTSDT &
+    AENDT <= TRTEDT + days(30), "Y", NA_character_)) # dim(adae) [1] 1191   88
+```
+
+# Derive Parameters (`CNSR`, `ADT`, `STARTDT`)
+
+# References
+
+[Creating a BDS Time-to-Event ADaM](https://cran.r-project.org/web/packages/admiral/vignettes/bds_tte.html)
+
+[ADaMIG V1.3](https://library.cdisc.org/browser/#/mdr/adam/adamig-1-3/datastructures/ADSL/variablesets/Identifier)
