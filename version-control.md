@@ -213,8 +213,17 @@ git push origin main
 ```
 
 ```bash
-cd C:/GoogleDrive_MyDrive/scripts/CDISC-ADaM-dataset-creation
 git add .
-git commit -m "Updated creating-a-BDS-Exposure-ADaM.qmd"
+git commit -m "Updated creating-ADSL-using-admiral-package.qmd"
 git push origin main
 ```
+
+## 2025-01-05
+```bash
+cd C:/GoogleDrive_MyDrive/scripts/CDISC-ADaM-dataset-creation
+git add .
+git commit -m "Created creating-a-PK-NCA-or-population-PK-ADaM.qmd"
+git push origin main
+```
+
+

@@ -44,6 +44,7 @@ Note: All examples assume CDISC SDTM and/or ADaM format as input unless otherwis
 library(admiral)
 library(dplyr, warn.conflicts = FALSE)
 library(pharmaversesdtm)
+library(lubridate)
 ```
 
 # Read in Data
@@ -81,6 +82,30 @@ adae <- ae %>%
 ```
 
 # Derive Parameters (`CNSR`, `ADT`, `STARTDT`)
+
+## CNSR
+
+-   Censor
+
+-   Defines whether the event was censored for the subject within the parameter (period of observation truncated prior to event being observed). It is strongly recommended to use 0 as an event indicator and positive integers as censoring indicators. It is also recommended that unique positive integers be used to indicate coded descriptions of censoring reasons. CNSR is required for time-to-event parameters.
+
+To derive the parameter dependent variables like `CNSR`, `ADT`, `STARTDT`, `EVNTDESC`, `SRCDOM`, `PARAMCD`, … the `derive_param_tte()` function can be used. It adds one parameter to the input dataset with one observation per subject. Usually it is called several times.
+
+For each subject it is determined if an event occurred. In the affirmative the analysis date `ADT` is set to the earliest event date. If no event occurred, the analysis date is set to the latest censoring date.
+
+The events and censorings are defined by the `event_source()` and the `censor_source()` class respectively. It defines
+
+-   which observations (`filter` parameter) of a source dataset (`dataset_name` parameter) are potential events or censorings,
+
+-   the value of the `CNSR` variable (`censor` parameter), and
+
+-   which variable provides the date (`date` parameter).
+
+The date can be provided as date (`--DT` variable) or datetime (`--DTM` variable).
+
+CDISC strongly recommends `CNSR = 0` for events and positive integers for censorings. `{admiral}` enforces this recommendation. Therefore the `censor` parameter is available for `censor_source()` only. It is defaulted to `1`.
+
+The `dataset_name` parameter expects a character value which is used as an identifier. The actual data which is used for the derivation of the parameter is provided via the `source_datasets` parameter of `derive_param_tte()`. It expects a named list of datasets. The names correspond to the identifiers specified for the `dataset_name` parameter. This allows to define events and censoring independent of the data.
 
 # References
 
